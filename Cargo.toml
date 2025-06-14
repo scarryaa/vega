@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 objc2 = "0.6.1"
+rdev = "0.5.3"
