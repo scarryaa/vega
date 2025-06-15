@@ -24,12 +24,9 @@ fn retile_windows(layout: Layout) {
     let filtered_windows: Vec<_> = windows
         .into_iter()
         .filter(|w| {
-            // Don't tile minimized windows
             if is_window_minimized(w) {
                 return false;
             }
-
-            // Filter for windows on main display
             if let Some(rect) = window_rect(w) {
                 let cx = rect.x + rect.width / 2.0;
                 let cy = rect.y + rect.height / 2.0;
@@ -43,41 +40,43 @@ fn retile_windows(layout: Layout) {
         })
         .collect();
 
-    println!("Tiling {} windows", filtered_windows.len());
+    println!(
+        "Tiling {} windows using {:?} layout",
+        filtered_windows.len(),
+        layout
+    );
     tile_windows(layout, main_display, &filtered_windows);
 }
 
 fn main() {
-    let mut layout = Layout::Vertical;
+    let layouts = [Layout::Vertical, Layout::Horizontal, Layout::Monocle];
+    let mut current_layout_index = 0;
 
     // Initial layout
-    retile_windows(layout);
+    retile_windows(layouts[current_layout_index]);
 
     let (tx, rx) = mpsc::channel();
 
     // Hotkey thread
     std::thread::spawn(move || {
         let mut modifiers = HashSet::new();
-        if let Err(error) = listen(move |event: Event| {
-            match event.event_type {
-                EventType::KeyPress(key) => {
-                    if key == Key::ControlLeft || key == Key::ControlRight || key == Key::Alt {
-                        modifiers.insert(key);
-                    }
-                    // Check for Control + Option + T
-                    if key == Key::KeyT
-                        && (modifiers.contains(&Key::ControlLeft)
-                            || modifiers.contains(&Key::ControlRight))
-                        && (modifiers.contains(&Key::Alt))
-                    {
-                        tx.send(()).ok();
-                    }
+        if let Err(error) = listen(move |event: Event| match event.event_type {
+            EventType::KeyPress(key) => {
+                if key == Key::ControlLeft || key == Key::ControlRight || key == Key::Alt {
+                    modifiers.insert(key);
                 }
-                EventType::KeyRelease(key) => {
-                    modifiers.remove(&key);
+                if key == Key::KeyT
+                    && (modifiers.contains(&Key::ControlLeft)
+                        || modifiers.contains(&Key::ControlRight))
+                    && (modifiers.contains(&Key::Alt))
+                {
+                    tx.send(()).ok();
                 }
-                _ => {}
             }
+            EventType::KeyRelease(key) => {
+                modifiers.remove(&key);
+            }
+            _ => {}
         }) {
             println!("Error: {:?}", error);
         }
@@ -86,13 +85,11 @@ fn main() {
     loop {
         // Check for hotkey event
         if let Ok(()) = rx.try_recv() {
-            layout = match layout {
-                Layout::Vertical => Layout::Horizontal,
-                Layout::Horizontal => Layout::Vertical,
-            };
-            println!("Switched layout to {:?}", layout);
+            current_layout_index = (current_layout_index + 1) % layouts.len();
+            let new_layout = layouts[current_layout_index];
+            println!("Switched layout to {:?}", new_layout);
 
-            retile_windows(layout);
+            retile_windows(new_layout);
         }
 
         thread::sleep(Duration::from_millis(100));

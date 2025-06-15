@@ -6,6 +6,7 @@ use crate::window::move_and_resize_window;
 pub enum Layout {
     Vertical,
     Horizontal,
+    Monocle,
 }
 
 pub fn tile_vertical(rects: &mut [Rect], screen: Rect) {
@@ -82,6 +83,12 @@ pub fn tile_horizontal(rects: &mut [Rect], screen: Rect) {
     }
 }
 
+pub fn tile_monocle(rects: &mut [Rect], screen: Rect) {
+    for rect in rects.iter_mut() {
+        *rect = screen;
+    }
+}
+
 pub fn tile_windows(layout: Layout, display: Rect, windows: &[window::Window]) {
     if windows.is_empty() {
         return;
@@ -100,6 +107,7 @@ pub fn tile_windows(layout: Layout, display: Rect, windows: &[window::Window]) {
     match layout {
         Layout::Vertical => tile_vertical(&mut rects, display),
         Layout::Horizontal => tile_horizontal(&mut rects, display),
+        Layout::Monocle => tile_monocle(&mut rects, display),
     }
 
     for (window, rect) in windows.iter().zip(rects.iter()) {
