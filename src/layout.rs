@@ -2,7 +2,7 @@ use crate::Rect;
 use crate::window;
 use crate::window::move_and_resize_window;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Layout {
     Vertical,
     Horizontal,
@@ -11,6 +11,11 @@ pub enum Layout {
 pub fn tile_vertical(rects: &mut [Rect], screen: Rect) {
     let n = rects.len();
     if n == 0 {
+        return;
+    }
+
+    if n == 1 {
+        rects[0] = screen;
         return;
     }
 
@@ -46,6 +51,11 @@ pub fn tile_horizontal(rects: &mut [Rect], screen: Rect) {
         return;
     }
 
+    if n == 1 {
+        rects[0] = screen;
+        return;
+    }
+
     let master_ratio = 0.6;
     let master_height = screen.height * master_ratio;
     let stack_height = screen.height - master_height;
@@ -73,6 +83,10 @@ pub fn tile_horizontal(rects: &mut [Rect], screen: Rect) {
 }
 
 pub fn tile_windows(layout: Layout, display: Rect, windows: &[window::Window]) {
+    if windows.is_empty() {
+        return;
+    }
+
     let mut rects = vec![
         Rect {
             x: 0.0,

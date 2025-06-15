@@ -44,11 +44,13 @@ unsafe extern "C" {
     ) -> CFStringRef;
     fn CFRelease(cf: CFTypeRef);
     fn CFRetain(cf: CFTypeRef) -> CFTypeRef;
+    fn CFBooleanGetValue(boolean: CFTypeRef) -> u8;
 }
 
 const KAX_WINDOWS: &str = "AXWindows";
 const KAX_POSITION: &str = "AXPosition";
 const KAX_SIZE: &str = "AXSize";
+const KAX_MINIMIZED: &str = "AXMinimized";
 const KCF_STRING_ENCODING_UTF8: u32 = 0x08000100;
 
 fn cfstring(s: &str) -> CFStringRef {
@@ -99,9 +101,12 @@ pub fn collect_windows() -> Vec<Window> {
             let app_ax = AXUIElementCreateApplication(pid);
             let mut windows_ref: CFTypeRef = ptr::null();
 
-            let result =
-                AXUIElementCopyAttributeValue(app_ax, cfstring(KAX_WINDOWS), &mut windows_ref);
+            let windows_attr = cfstring(KAX_WINDOWS);
+            let result = AXUIElementCopyAttributeValue(app_ax, windows_attr, &mut windows_ref);
+            CFRelease(windows_attr);
+
             if result != 0 || windows_ref.is_null() {
+                CFRelease(app_ax);
                 continue;
             }
 
@@ -118,6 +123,7 @@ pub fn collect_windows() -> Vec<Window> {
             }
 
             CFRelease(windows_ref);
+            CFRelease(app_ax);
         }
     }
 
@@ -126,13 +132,15 @@ pub fn collect_windows() -> Vec<Window> {
 
 pub fn move_and_resize_window(window: &Window, rect: Rect) {
     unsafe {
+        let pos_attr = cfstring(KAX_POSITION);
+        let size_attr = cfstring(KAX_SIZE);
+
         let pos = CGPoint {
             x: rect.x,
             y: rect.y,
         };
         let pos_value = AXValueCreate(AXValueType::CGPoint, &pos as *const _ as *const c_void);
-        let pos_result =
-            AXUIElementSetAttributeValue(window.ax_ref, cfstring(KAX_POSITION), pos_value);
+        let pos_result = AXUIElementSetAttributeValue(window.ax_ref, pos_attr, pos_value);
         CFRelease(pos_value);
 
         let size = CGSize {
@@ -140,9 +148,11 @@ pub fn move_and_resize_window(window: &Window, rect: Rect) {
             height: rect.height,
         };
         let size_value = AXValueCreate(AXValueType::CGSize, &size as *const _ as *const c_void);
-        let size_result =
-            AXUIElementSetAttributeValue(window.ax_ref, cfstring(KAX_SIZE), size_value);
+        let size_result = AXUIElementSetAttributeValue(window.ax_ref, size_attr, size_value);
         CFRelease(size_value);
+
+        CFRelease(pos_attr);
+        CFRelease(size_attr);
 
         if pos_result != 0 || size_result != 0 {
             println!(
@@ -158,16 +168,22 @@ pub fn window_rect(window: &Window) -> Option<Rect> {
         let mut pos_ref: CFTypeRef = std::ptr::null();
         let mut size_ref: CFTypeRef = std::ptr::null();
 
-        let pos_result =
-            AXUIElementCopyAttributeValue(window.ax_ref, cfstring(KAX_POSITION), &mut pos_ref);
-        let size_result =
-            AXUIElementCopyAttributeValue(window.ax_ref, cfstring(KAX_SIZE), &mut size_ref);
+        let pos_attr = cfstring(KAX_POSITION);
+        let size_attr = cfstring(KAX_SIZE);
+
+        let pos_result = AXUIElementCopyAttributeValue(window.ax_ref, pos_attr, &mut pos_ref);
+        let size_result = AXUIElementCopyAttributeValue(window.ax_ref, size_attr, &mut size_ref);
+
+        CFRelease(pos_attr);
+        CFRelease(size_attr);
 
         if pos_result != 0 || size_result != 0 || pos_ref.is_null() || size_ref.is_null() {
-            println!(
-                "Failed to get rect for '{}': pos_result={}, size_result={}, pos_ref={:?}, size_ref={:?}",
-                window.app_name, pos_result, size_result, pos_ref, size_ref
-            );
+            if !pos_ref.is_null() {
+                CFRelease(pos_ref)
+            };
+            if !size_ref.is_null() {
+                CFRelease(size_ref)
+            };
             return None;
         }
 
@@ -192,10 +208,6 @@ pub fn window_rect(window: &Window) -> Option<Rect> {
         CFRelease(size_ref);
 
         if got_pos == 0 || got_size == 0 {
-            println!(
-                "AXValueGetValue failed for '{}': got_pos={}, got_size={}",
-                window.app_name, got_pos, got_size
-            );
             return None;
         }
 
@@ -205,5 +217,26 @@ pub fn window_rect(window: &Window) -> Option<Rect> {
             width: size.width,
             height: size.height,
         })
+    }
+}
+
+pub fn is_window_minimized(window: &Window) -> bool {
+    unsafe {
+        let mut value_ref: CFTypeRef = ptr::null();
+        let attr = cfstring(KAX_MINIMIZED);
+        let result = AXUIElementCopyAttributeValue(window.ax_ref, attr, &mut value_ref);
+        CFRelease(attr);
+
+        if result != 0 || value_ref.is_null() {
+            if !value_ref.is_null() {
+                CFRelease(value_ref);
+            }
+            // Assume not minimized if we can't get the value
+            return false;
+        }
+
+        let is_minimized = CFBooleanGetValue(value_ref) != 0;
+        CFRelease(value_ref);
+        is_minimized
     }
 }

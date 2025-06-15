@@ -3,7 +3,7 @@ use rdev::{Event, EventType, Key, listen};
 use crate::{
     geometry::Rect,
     layout::{Layout, tile_windows},
-    window::{collect_windows, window_rect},
+    window::{collect_windows, is_window_minimized, window_rect},
 };
 use std::{collections::HashSet, thread};
 use std::{sync::mpsc, time::Duration};
@@ -17,12 +17,19 @@ mod window;
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {}
 
-fn main() {
+fn retile_windows(layout: Layout) {
     let main_display = core_graphics::main_screen_rect();
     let windows = collect_windows();
+
     let filtered_windows: Vec<_> = windows
         .into_iter()
         .filter(|w| {
+            // Don't tile minimized windows
+            if is_window_minimized(w) {
+                return false;
+            }
+
+            // Filter for windows on main display
             if let Some(rect) = window_rect(w) {
                 let cx = rect.x + rect.width / 2.0;
                 let cy = rect.y + rect.height / 2.0;
@@ -36,12 +43,15 @@ fn main() {
         })
         .collect();
 
-    let display = main_display;
-    let windows = filtered_windows;
+    println!("Tiling {} windows", filtered_windows.len());
+    tile_windows(layout, main_display, &filtered_windows);
+}
+
+fn main() {
+    let mut layout = Layout::Vertical;
 
     // Initial layout
-    let mut layout = Layout::Vertical;
-    tile_windows(layout, display, &windows);
+    retile_windows(layout);
 
     let (tx, rx) = mpsc::channel();
 
@@ -80,9 +90,9 @@ fn main() {
                 Layout::Vertical => Layout::Horizontal,
                 Layout::Horizontal => Layout::Vertical,
             };
-            println!("Switched layout!");
+            println!("Switched layout to {:?}", layout);
 
-            tile_windows(layout, display, &windows);
+            retile_windows(layout);
         }
 
         thread::sleep(Duration::from_millis(100));
