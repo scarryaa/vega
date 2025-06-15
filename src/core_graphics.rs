@@ -1,4 +1,4 @@
-use crate::Rect;
+use crate::geometry::Rect;
 
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {}

@@ -1,8 +1,10 @@
-use crate::Rect;
+use serde::{Deserialize, Serialize};
+
+use crate::geometry::Rect;
 use crate::window;
 use crate::window::move_and_resize_window;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Layout {
     Vertical,
     Horizontal,
